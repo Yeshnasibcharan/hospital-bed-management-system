@@ -802,6 +802,7 @@ def admit_patient(request, bed_id):
                 patient=patient,
                 bed=bed,
                 admitted_by=request.user,
+                diet=form.cleaned_data['diet'],
             )
             bed.status = 'occupied'
             bed.save()

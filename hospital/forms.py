@@ -20,6 +20,17 @@ class AdmitPatientForm(forms.Form):
         required=False,
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Optional'})
     )
+    diet = forms.ChoiceField(
+        choices=[
+            ('standard', 'Standard Diet'),
+            ('diabetic', 'Diabetic Diet'),
+            ('low_salt', 'Low-Salt Diet'),
+            ('soft', 'Soft Diet'),
+            ('npo', 'NPO (Nil by Mouth)'),
+        ],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        initial='standard',
+    )
 
     def __init__(self, *args, ward=None, **kwargs):
         super().__init__(*args, **kwargs)
