@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Cleaner Dashboard{% endblock %}
+{% block bg_image %}{% static 'hospital/images/cleaner_banner.png' %}{% endblock %}
+
+{% block notification_bell %}
+<div class="dropdown">
+    <button class="btn btn-sm btn-light position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-bell"></i>
+        {% if notifications %}
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+            {{ notifications|length }}
+        </span>
+        {% endif %}
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end p-2" style="width: 320px;">
+        <li><h6 class="dropdown-header">Recent Notifications</h6></li>
+        {% for note in notifications %}
+        <li class="small text-muted border-bottom py-2 px-2">
+            {{ note.message }}<br><span class="text-muted">{{ note.created_at|timesince }} ago</span>
+        </li>
+        {% empty %}
+        <li class="small text-muted px-2">No recent notifications.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<button id="enable-sound-btn" class="btn btn-outline-primary btn-sm mb-3 float-end">
+    <i class="bi bi-volume-up"></i> Enable Sound
+</button>
+<div class="hero-banner hero-cleaner">
+    <h2><i class="bi bi-bucket"></i> Cleaner Dashboard</h2>
+    <p>Welcome, {{ request.user.username }}. Here are the beds awaiting your attention.</p>
+</div>
+
+<p class="text-muted mt-4">Beds awaiting cleaning:</p>
+<div class="row g-3" id="cleaning-beds-container"></div>
+<p id="no-cleaning-msg" class="text-success" style="display:none;"><i class="bi bi-check-circle"></i> No beds currently need cleaning. All clear!</p>
+
+<script>
+    const soundBtn = document.getElementById('enable-sound-btn');
+    let audioCtx = null;
+    let lastKnownNotificationId = null;
+
+    if (sessionStorage.getItem('soundEnabled') === 'true') {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtx.resume();
+        soundBtn.innerHTML = '<i class="bi bi-volume-up-fill"></i> Sound Enabled';
+        soundBtn.disabled = true;
+        soundBtn.classList.remove('btn-outline-primary');
+        soundBtn.classList.add('btn-success');
+    }
+
+    soundBtn.addEventListener('click', function() {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtx.resume();
+        sessionStorage.setItem('soundEnabled', 'true');
+        this.innerHTML = '<i class="bi bi-volume-up-fill"></i> Sound Enabled';
+        this.disabled = true;
+        this.classList.remove('btn-outline-primary');
+        this.classList.add('btn-success');
+    });
+
+    function playBeep() {
+        if (!audioCtx) return;
+        function tone(startTime, freq) {
+            const oscillator = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            oscillator.connect(gain);
+            gain.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.value = freq;
+            gain.gain.setValueAtTime(0.5, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.5);
+            oscillator.start(startTime);
+            oscillator.stop(startTime + 0.5);
+        }
+        const now = audioCtx.currentTime;
+        tone(now, 880);
+        tone(now + 0.35, 880);
+    }
+
+    function getCsrfToken() {
+        const match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? match[1] : '';
+    }
+
+    function renderBedCard(bed) {
+        const col = document.createElement('div');
+        col.className = 'col-md-4';
+        col.innerHTML = `
+            <div class="card card-medical p-3 bed-cleaning">
+                <h5 class="mb-1">${bed.bed_number}</h5>
+                <p class="text-muted mb-2">${bed.ward_name}</p>
+                <span class="badge bg-warning text-dark mb-3">Cleaning Required</span>
+                <form method="post" action="/bed/${bed.id}/mark-cleaned/">
+                    <input type="hidden" name="csrfmiddlewaretoken" value="${getCsrfToken()}">
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-check2-circle"></i> Mark as Cleaned
+                    </button>
+                </form>
+            </div>
+        `;
+        return col;
+    }
+
+    function refreshDashboard() {
+        fetch('/cleaner-dashboard-data/')
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('cleaning-beds-container');
+                const noMsg = document.getElementById('no-cleaning-msg');
+                container.innerHTML = '';
+
+                if (data.beds.length === 0) {
+                    noMsg.style.display = 'block';
+                } else {
+                    noMsg.style.display = 'none';
+                    data.beds.forEach(bed => container.appendChild(renderBedCard(bed)));
+                }
+
+                if (lastKnownNotificationId === null) {
+                    lastKnownNotificationId = data.latest_notification_id;
+                } else if (data.latest_notification_id > lastKnownNotificationId) {
+                    lastKnownNotificationId = data.latest_notification_id;
+                    playBeep();
+                }
+            })
+            .catch(() => {});
+    }
+
+    refreshDashboard();
+    setInterval(refreshDashboard, 3000);
+</script>
+{% endblock %}

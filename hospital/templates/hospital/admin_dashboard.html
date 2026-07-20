@@ -1,0 +1,567 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block bg_image %}{% static 'hospital/images/admin_banner.png' %}{% endblock %}
+
+{% block sidebar %}
+<div class="admin-sidebar">
+    <div class="nav-section-label">Overview</div>
+    <a href="{% url 'admin_dashboard' %}" class="nav-link active">
+        <i class="bi bi-grid-1x2-fill"></i> Dashboard
+    </a>
+
+    <div class="nav-section-label">Wards</div>
+    {% for ward in all_wards %}
+    <a href="{% url 'ward_beds' ward.id %}" class="nav-link">
+        <i class="bi bi-hospital"></i> {{ ward.name }}
+    </a>
+    {% endfor %}
+
+    <div class="nav-section-label">Reports</div>
+    <a href="{% url 'export_bed_status_csv' %}" class="nav-link">
+        <i class="bi bi-download"></i> Export Bed Status (CSV)
+    </a>
+    <a href="{% url 'export_admission_history_csv' %}" class="nav-link">
+        <i class="bi bi-download"></i> Export Admissions (CSV)
+    </a>
+
+    <div class="nav-section-label">Administration</div>
+    <a href="/admin/" class="nav-link">
+        <i class="bi bi-gear-fill"></i> Django Admin Panel
+    </a>
+    <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="nav-link border-0 bg-transparent w-100 text-start">
+            <i class="bi bi-box-arrow-right"></i> Logout
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h3 class="mb-0">Dashboard</h3>
+        <p class="text-muted mb-0">Here's today's hospital overview.</p>
+    </div>
+    <div class="text-end">
+        <div class="small text-muted mb-1">
+            <span id="live-dot" class="live-dot"></span>
+            Live · updated <span id="last-updated-text">just now</span>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card card-medical p-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small">Total Beds</div>
+                    <h3 class="mb-0 mt-1" id="stat-total-beds">{{ total_beds }}</h3>
+                </div>
+                <i class="bi bi-hospital fs-4 text-primary"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-medical p-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small">Available</div>
+                    <h3 class="mb-0 mt-1" id="stat-available-beds">{{ available_beds }}</h3>
+                </div>
+                <i class="bi bi-check-circle fs-4 text-success"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-medical p-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small">Occupied</div>
+                    <h3 class="mb-0 mt-1" id="stat-occupied-beds">{{ occupied_beds }}</h3>
+                    <span id="stat-occupied-trend"></span>
+                </div>
+                <i class="bi bi-person-fill fs-4 text-danger"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-medical p-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small">Cleaning Required</div>
+                    <h3 class="mb-0 mt-1" id="stat-cleaning-beds">{{ cleaning_beds }}</h3>
+                </div>
+                <i class="bi bi-bucket fs-4 text-warning"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card card-medical p-3">
+            <div class="text-muted small">Total Admissions (All Time)</div>
+            <h4 class="mb-0 mt-1" id="stat-total-admitted">{{ total_patients_admitted }}</h4>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-medical p-3">
+            <div class="text-muted small">Currently Admitted</div>
+            <h4 class="mb-0 mt-1" id="stat-currently-admitted">{{ currently_admitted }}</h4>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-medical p-3">
+            <div class="text-muted small">Admitted Today</div>
+            <h4 class="mb-0 mt-1"><span id="stat-admitted-today">{{ admissions_today }}</span> <span id="stat-admitted-trend"></span></h4>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-medical p-3">
+            <div class="text-muted small">Discharged Today</div>
+            <h4 class="mb-0 mt-1"><span id="stat-discharged-today">{{ discharges_today }}</span> <span id="stat-discharged-trend"></span></h4>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-5">
+        <div class="card card-medical p-3">
+            <h6 class="mb-1">Bed Occupancy</h6>
+            <p class="text-muted small mb-2">Occupancy rate aggregate</p>
+            <div id="occupancyDonut" style="width: 100%; height: 280px;"></div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card card-medical p-3" style="max-height: 340px; overflow-y: auto;">
+            <h6 class="mb-3"><i class="bi bi-activity"></i> Recent Activity</h6>
+            <div id="recent-activity-container">
+                <p class="text-muted small">Loading...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-12">
+        <div class="card card-medical p-3">
+            <h6 class="mb-3">Ward Overview</h6>
+            <div class="row g-3" id="ward-overview-container"></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-12">
+        <div class="card card-medical p-3">
+            <h6 class="mb-3"><i class="bi bi-clipboard2-pulse"></i> Recently Admitted Patients</h6>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr class="text-muted small">
+                            <th>Patient</th>
+                            <th>Ward / Bed</th>
+                            <th>Gender</th>
+                            <th>Admitted By</th>
+                            <th>Admitted On</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-admissions-body">
+                        <tr><td colspan="6" class="text-muted text-center py-3">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card card-medical p-3">
+            <h6 class="mb-3">Occupancy by Ward</h6>
+            <div id="wardBarChart" style="width: 100%; height: 300px;"></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card card-medical p-3">
+            <h6 class="mb-3">Admitted Patients by Gender</h6>
+            <div id="patientGenderChart" style="width: 100%; height: 300px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-12">
+        <div class="card card-medical p-3">
+            <h6 class="mb-1">Admission Trend & 3-Day Forecast</h6>
+            <p class="text-muted small mb-3">Solid line: actual daily admissions (last 14 days). Dashed line: forecast.</p>
+            <div id="trendChart" style="width: 100%; height: 340px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card card-medical p-3">
+            <h6 class="mb-1">Peak Admission Hours</h6>
+            <p class="text-muted small mb-3">All-time admissions grouped by hour of day.</p>
+            <div id="peakHoursChart" style="width: 100%; height: 300px;"></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card card-medical p-3">
+            <h6 class="mb-1">Average Length of Stay by Ward</h6>
+            <p class="text-muted small mb-3">Hours between admission and discharge (discharged patients only).</p>
+            <div id="losChart" style="width: 100%; height: 300px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-12">
+        <div class="card card-medical p-3">
+            <h6 class="mb-1">Notifications by Type</h6>
+            <p class="text-muted small mb-3">All-time count of each system alert type.</p>
+            <div id="notifTypeChart" style="width: 100%; height: 300px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card card-medical p-3">
+            <h6 class="mb-1">Admissions Trend + Gender Split</h6>
+            <p class="text-muted small mb-3">Hover the line to see that day's gender breakdown in the pie below.</p>
+            <div id="genderSyncChart" style="width: 100%; height: 420px;"></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card card-medical p-3">
+            <h6 class="mb-1">Occupancy % Trend — Key Wards</h6>
+            <p class="text-muted small mb-3">Daily occupancy over the last 14 days for 4 wards.</p>
+            <div id="wardOccupancyTrendChart" style="width: 100%; height: 420px;"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+.live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #198754;
+    margin-right: 4px;
+    animation: livePulse 1.6s infinite;
+}
+@keyframes livePulse {
+    0% { box-shadow: 0 0 0 0 rgba(25,135,84,0.5); }
+    70% { box-shadow: 0 0 0 6px rgba(25,135,84,0); }
+    100% { box-shadow: 0 0 0 0 rgba(25,135,84,0); }
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>
+    // ---- Initial data from server render ----
+    var initial = {
+        status_pie_data: {{ status_pie_data|safe }},
+        ward_names: {{ ward_names|safe }},
+        ward_occupied: {{ ward_occupied|safe }},
+        ward_available: {{ ward_available|safe }},
+        trend_labels: {{ trend_labels|safe }},
+        trend_actual: {{ trend_actual|safe }},
+        trend_forecast: {{ trend_forecast|safe }},
+        patient_gender_pie_data: {{ patient_gender_pie_data|safe }},
+        hour_labels: {{ hour_labels|safe }},
+        hour_data: {{ hour_data|safe }},
+        los_labels: {{ los_labels|safe }},
+        los_data: {{ los_data|safe }},
+        notif_labels: {{ notif_labels|safe }},
+        notif_data: {{ notif_data|safe }},
+        gender_trend_labels: {{ gender_trend_labels|safe }},
+        gender_trend_male: {{ gender_trend_male|safe }},
+        gender_trend_female: {{ gender_trend_female|safe }},
+        ward_occupancy_trend_series: {{ ward_occupancy_trend_series|safe }},
+        occupancy_pct_now: {{ occupancy_pct_now }}
+    };
+
+    // ---- Chart initialization (once) ----
+    var occupancyDonut = echarts.init(document.getElementById('occupancyDonut'));
+    occupancyDonut.setOption({
+        tooltip: { trigger: 'item' },
+        legend: { bottom: '0%' },
+        color: ['#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6c757d'],
+        series: [{
+            name: 'Bed Status', type: 'pie', radius: ['50%', '75%'], avoidLabelOverlap: false,
+            label: { show: true, position: 'center', formatter: initial.occupancy_pct_now + '%\nAggregate', fontSize: 18, fontWeight: 'bold' },
+            emphasis: { label: { show: true } },
+            data: initial.status_pie_data
+        }]
+    });
+
+    var patientGenderChart = echarts.init(document.getElementById('patientGenderChart'));
+    patientGenderChart.setOption({
+        tooltip: { trigger: 'item' },
+        legend: { bottom: '0%' },
+        color: ['#0d6efd', '#e83e8c'],
+        series: [{ name: 'Patient Gender', type: 'pie', radius: ['40%', '70%'], label: { show: true, formatter: '{b}: {c}' }, data: initial.patient_gender_pie_data }]
+    });
+
+    var barChart = echarts.init(document.getElementById('wardBarChart'));
+    barChart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['Occupied', 'Available'], bottom: '0%' },
+        color: ['#dc3545', '#198754'],
+        xAxis: { type: 'category', data: initial.ward_names, axisLabel: { rotate: 45, fontSize: 10 } },
+        yAxis: { type: 'value', name: 'Beds' },
+        series: [
+            { name: 'Occupied', type: 'bar', data: initial.ward_occupied },
+            { name: 'Available', type: 'bar', data: initial.ward_available }
+        ]
+    });
+
+    var trendChart = echarts.init(document.getElementById('trendChart'));
+    trendChart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['Actual Admissions', 'Forecast'], bottom: '0%' },
+        color: ['#0d6efd', '#dc3545'],
+        xAxis: { type: 'category', data: initial.trend_labels, axisLabel: { rotate: 30 } },
+        yAxis: { type: 'value', name: 'Admissions per Day' },
+        series: [
+            { name: 'Actual Admissions', type: 'line', data: initial.trend_actual, smooth: true, symbol: 'circle' },
+            { name: 'Forecast', type: 'line', data: initial.trend_forecast, smooth: true, lineStyle: { type: 'dashed' }, symbol: 'circle' }
+        ]
+    });
+
+    var peakHoursChart = echarts.init(document.getElementById('peakHoursChart'));
+    peakHoursChart.setOption({
+        tooltip: { trigger: 'axis' },
+        color: ['#0d6efd'],
+        xAxis: { type: 'category', data: initial.hour_labels, axisLabel: { rotate: 45, fontSize: 9 } },
+        yAxis: { type: 'value', name: 'Admissions' },
+        series: [{ name: 'Admissions', type: 'bar', data: initial.hour_data }]
+    });
+
+    var losChart = echarts.init(document.getElementById('losChart'));
+    losChart.setOption({
+        tooltip: { trigger: 'axis' },
+        color: ['#198754'],
+        xAxis: { type: 'category', data: initial.los_labels, axisLabel: { rotate: 45, fontSize: 9 } },
+        yAxis: { type: 'value', name: 'Avg Hours' },
+        series: [{ name: 'Avg Length of Stay (hrs)', type: 'bar', data: initial.los_data }]
+    });
+
+    var notifTypeChart = echarts.init(document.getElementById('notifTypeChart'));
+    notifTypeChart.setOption({
+        tooltip: { trigger: 'axis' },
+        color: ['#e83e8c'],
+        xAxis: { type: 'category', data: initial.notif_labels, axisLabel: { rotate: 20, fontSize: 10 } },
+        yAxis: { type: 'value', name: 'Count' },
+        series: [{ name: 'Notifications', type: 'bar', data: initial.notif_data }]
+    });
+
+    var genderSyncChart = echarts.init(document.getElementById('genderSyncChart'));
+    function pieDataForIndex(maleArr, femaleArr, i) {
+        return [{ value: maleArr[i], name: 'Male' }, { value: femaleArr[i], name: 'Female' }];
+    }
+    genderSyncChart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'line' } },
+        legend: { data: ['Male', 'Female'], top: 0 },
+        color: ['#0d6efd', '#e83e8c'],
+        grid: { top: '18%', bottom: '55%' },
+        xAxis: { type: 'category', data: initial.gender_trend_labels, axisLabel: { rotate: 30, fontSize: 10 } },
+        yAxis: { type: 'value', name: 'Admissions' },
+        series: [
+            { name: 'Male', type: 'line', data: initial.gender_trend_male, smooth: true },
+            { name: 'Female', type: 'line', data: initial.gender_trend_female, smooth: true },
+            {
+                type: 'pie', id: 'genderPie', radius: '28%', center: ['50%', '80%'],
+                label: { formatter: '{b}: {c} ({d}%)' },
+                data: pieDataForIndex(initial.gender_trend_male, initial.gender_trend_female, initial.gender_trend_male.length - 1)
+            }
+        ]
+    });
+    genderSyncChart.on('updateAxisPointer', function (event) {
+        var xAxisInfo = event.axesInfo && event.axesInfo[0];
+        if (xAxisInfo) {
+            genderSyncChart.setOption({
+                series: { id: 'genderPie', data: pieDataForIndex(window.currentMaleData || initial.gender_trend_male, window.currentFemaleData || initial.gender_trend_female, xAxisInfo.value) }
+            });
+        }
+    });
+    window.currentMaleData = initial.gender_trend_male;
+    window.currentFemaleData = initial.gender_trend_female;
+
+    var wardOccupancyTrendChart = echarts.init(document.getElementById('wardOccupancyTrendChart'));
+    function buildWardSeries(seriesData) {
+        return seriesData.map(function (s) { return { name: s.name, type: 'line', data: s.data, smooth: true }; });
+    }
+    wardOccupancyTrendChart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: initial.ward_occupancy_trend_series.map(function (s) { return s.name; }), bottom: '0%' },
+        xAxis: { type: 'category', data: initial.gender_trend_labels, axisLabel: { rotate: 30, fontSize: 10 } },
+        yAxis: { type: 'value', name: 'Occupancy %', max: 100 },
+        series: buildWardSeries(initial.ward_occupancy_trend_series)
+    });
+
+    window.addEventListener('resize', function () {
+        occupancyDonut.resize();
+        barChart.resize();
+        trendChart.resize();
+        patientGenderChart.resize();
+        peakHoursChart.resize();
+        losChart.resize();
+        notifTypeChart.resize();
+        genderSyncChart.resize();
+        wardOccupancyTrendChart.resize();
+    });
+
+    // ---- Helper renderers ----
+    function trendBadge(value, upIsGood) {
+        if (value > 0) {
+            var cls = upIsGood ? 'success' : 'danger';
+            return `<span class="badge bg-${cls}-subtle text-${cls} mt-1"><i class="bi bi-arrow-up"></i> +${value}</span>`;
+        } else if (value < 0) {
+            var cls2 = upIsGood ? 'danger' : 'success';
+            return `<span class="badge bg-${cls2}-subtle text-${cls2} mt-1"><i class="bi bi-arrow-down"></i> ${value}</span>`;
+        }
+        return `<span class="badge bg-secondary-subtle text-secondary mt-1">No change</span>`;
+    }
+
+    function renderWardOverview(wardBreakdown) {
+        var container = document.getElementById('ward-overview-container');
+        container.innerHTML = '';
+        wardBreakdown.forEach(function (ward) {
+            var colorClass = ward.pct >= 90 ? 'bg-danger' : (ward.pct >= 70 ? 'bg-warning text-dark' : 'bg-success');
+            var barClass = ward.pct >= 90 ? 'bg-danger' : (ward.pct >= 70 ? 'bg-warning' : 'bg-success');
+            var col = document.createElement('div');
+            col.className = 'col-md-4';
+            col.innerHTML = `
+                <div class="p-3 border rounded-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong class="small">${ward.name}</strong>
+                        <span class="badge ${colorClass}">${ward.pct}%</span>
+                    </div>
+                    <div class="progress mb-2" style="height: 6px;">
+                        <div class="progress-bar ${barClass}" style="width: ${ward.pct}%;"></div>
+                    </div>
+                    <div class="small text-muted">${ward.occupied}/${ward.total} occupied</div>
+                </div>
+            `;
+            container.appendChild(col);
+        });
+    }
+
+    function renderRecentActivity(activities) {
+        var container = document.getElementById('recent-activity-container');
+        if (activities.length === 0) {
+            container.innerHTML = '<p class="text-muted small">No recent activity.</p>';
+            return;
+        }
+        container.innerHTML = activities.map(function (a) {
+            return `<div class="border-bottom py-2">
+                <div class="small">${a.message}</div>
+                <div class="text-muted" style="font-size: 0.75rem;">${a.time_ago}</div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderRecentAdmissions(admissions) {
+        var tbody = document.getElementById('recent-admissions-body');
+        if (admissions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-3">No admissions yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = admissions.map(function (a) {
+            var statusBadge = a.is_active
+                ? '<span class="badge bg-success-subtle text-success">Active</span>'
+                : '<span class="badge bg-secondary-subtle text-secondary">Discharged</span>';
+            return `<tr>
+                <td><a href="/bed/${a.bed_id}/" class="text-decoration-none text-dark"><strong>${a.patient_name}</strong></a></td>
+                <td>${a.ward_bed}</td>
+                <td>${a.gender}</td>
+                <td>${a.admitted_by}</td>
+                <td>${a.admission_date}</td>
+                <td>${statusBadge}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    // ---- Main refresh cycle ----
+    var secondsSinceUpdate = 0;
+    function refreshDashboard() {
+        fetch('/admin-dashboard-data/')
+            .then(response => response.json())
+            .then(data => {
+                secondsSinceUpdate = 0;
+                document.getElementById('last-updated-text').textContent = 'just now';
+
+                document.getElementById('stat-total-beds').textContent = data.total_beds;
+                document.getElementById('stat-available-beds').textContent = data.available_beds;
+                document.getElementById('stat-occupied-beds').textContent = data.occupied_beds;
+                document.getElementById('stat-occupied-trend').innerHTML = trendBadge(data.occupied_trend, false);
+                document.getElementById('stat-cleaning-beds').textContent = data.cleaning_beds;
+                document.getElementById('stat-total-admitted').textContent = data.total_patients_admitted;
+                document.getElementById('stat-currently-admitted').textContent = data.currently_admitted;
+                document.getElementById('stat-admitted-today').textContent = data.admissions_today;
+                document.getElementById('stat-admitted-trend').innerHTML = trendBadge(data.admissions_trend, true);
+                document.getElementById('stat-discharged-today').textContent = data.discharges_today;
+                document.getElementById('stat-discharged-trend').innerHTML = trendBadge(data.discharges_trend, true);
+
+                renderWardOverview(data.ward_breakdown);
+                renderRecentActivity(data.recent_activity);
+                renderRecentAdmissions(data.recent_admissions);
+
+                occupancyDonut.setOption({
+                    series: [{
+                        label: { formatter: data.occupancy_pct_now + '%\nAggregate' },
+                        data: data.status_pie_data
+                    }]
+                });
+                patientGenderChart.setOption({ series: [{ data: data.patient_gender_pie_data }] });
+                barChart.setOption({
+                    xAxis: { data: data.ward_names },
+                    series: [{ data: data.ward_occupied }, { data: data.ward_available }]
+                });
+                trendChart.setOption({
+                    xAxis: { data: data.trend_labels },
+                    series: [{ data: data.trend_actual }, { data: data.trend_forecast }]
+                });
+                peakHoursChart.setOption({ series: [{ data: data.hour_data }] });
+                losChart.setOption({ xAxis: { data: data.los_labels }, series: [{ data: data.los_data }] });
+                notifTypeChart.setOption({ xAxis: { data: data.notif_labels }, series: [{ data: data.notif_data }] });
+
+                window.currentMaleData = data.gender_trend_male;
+                window.currentFemaleData = data.gender_trend_female;
+                genderSyncChart.setOption({
+                    xAxis: { data: data.gender_trend_labels },
+                    series: [
+                        { data: data.gender_trend_male },
+                        { data: data.gender_trend_female },
+                        { id: 'genderPie', data: pieDataForIndex(data.gender_trend_male, data.gender_trend_female, data.gender_trend_male.length - 1) }
+                    ]
+                });
+
+                wardOccupancyTrendChart.setOption({
+                    xAxis: { data: data.gender_trend_labels },
+                    legend: { data: data.ward_occupancy_trend_series.map(function (s) { return s.name; }) },
+                    series: buildWardSeries(data.ward_occupancy_trend_series)
+                });
+            })
+            .catch(() => {});
+    }
+
+    setInterval(function () {
+        secondsSinceUpdate += 1;
+        var el = document.getElementById('last-updated-text');
+        el.textContent = secondsSinceUpdate < 60 ? secondsSinceUpdate + 's ago' : Math.floor(secondsSinceUpdate / 60) + 'm ago';
+    }, 1000);
+
+    setInterval(refreshDashboard, 5000);
+</script>
+{% endblock %}

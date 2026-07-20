@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Login{% endblock %}
+{% block bg_image %}{% static 'hospital/images/login_banner.png' %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="card card-medical p-4" style="width: 380px;">
+        <div class="text-center mb-3">
+            <i class="bi bi-hospital text-primary" style="font-size: 3rem;"></i>
+            <h4 class="mt-2">Staff Login</h4>
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label">Username</label>
+                {{ form.username }}
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Password</label>
+                {{ form.password }}
+            </div>
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="bi bi-box-arrow-in-right"></i> Login
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

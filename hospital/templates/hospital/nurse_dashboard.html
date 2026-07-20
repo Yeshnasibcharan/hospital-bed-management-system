@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Nurse Dashboard{% endblock %}
+{% block bg_image %}{% static 'hospital/images/nurse_banner.png' %}{% endblock %}
+
+{% block notification_bell %}
+<div class="dropdown">
+    <button class="btn btn-sm btn-light position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-bell"></i>
+        {% if notifications %}
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+            {{ notifications|length }}
+        </span>
+        {% endif %}
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end p-2" style="width: 320px;">
+        <li><h6 class="dropdown-header">Recent Notifications</h6></li>
+        {% for note in notifications %}
+        <li class="small text-muted border-bottom py-2 px-2">
+            {{ note.message }}<br><span class="text-muted">{{ note.created_at|timesince }} ago</span>
+        </li>
+        {% empty %}
+        <li class="small text-muted px-2">No recent notifications.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<button id="enable-sound-btn" class="btn btn-outline-primary btn-sm mb-3 float-end">
+    <i class="bi bi-volume-up"></i> Enable Sound
+</button>
+<div class="hero-banner hero-nurse">
+    <h2><i class="bi bi-clipboard2-pulse"></i> Nurse Dashboard</h2>
+    <p>Welcome, {{ request.user.username }}. Manage beds and patients here.</p>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="card card-medical p-3 mb-4 position-relative">
+    <input type="text" id="patient-search-input" class="form-control" placeholder="Search patient by name..." autocomplete="off">
+    <div id="search-results-dropdown" class="list-group position-absolute w-100" style="top: 100%; left: 0; z-index: 1000; display: none;"></div>
+</div>
+
+{% if assigned_ward %}
+<a href="{% url 'medication_sheet' %}" class="btn btn-outline-primary mb-4">
+    <i class="bi bi-capsule"></i> Medication Sheet
+</a>
+
+<p class="text-muted">Beds in {{ assigned_ward.name }}:</p>
+<div class="pod-layout">
+    <div class="pod-side" id="pod-side-left"></div>
+    <div class="pod-corridor">
+        <i class="bi bi-arrow-down-up"></i>
+        <span>Nursing Access Corridor</span>
+    </div>
+    <div class="pod-side" id="pod-side-right"></div>
+</div>
+<p id="no-beds-msg" style="display:none;">No beds in this ward yet.</p>
+
+{% else %}
+    <p class="text-muted">Select a ward to view its beds.</p>
+    <div class="row g-3">
+        {% for ward in wards %}
+        <div class="col-md-4">
+            <a href="{% url 'ward_beds' ward.id %}" class="text-decoration-none">
+                <div class="card card-medical p-3">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-hospital fs-2 text-primary me-3"></i>
+                        <div>
+                            <h5 class="mb-0 text-dark">{{ ward.name }}</h5>
+                            <small class="text-muted">{{ ward.beds.count }} beds</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% empty %}
+        <p>No wards found. Add some in the admin panel.</p>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<script>
+    const soundBtn = document.getElementById('enable-sound-btn');
+    let audioCtx = null;
+    let soundEnabled = false;
+    let lastKnownNotificationId = null;
+
+    if (sessionStorage.getItem('soundEnabled') === 'true') {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtx.resume();
+        soundEnabled = true;
+        soundBtn.innerHTML = '<i class="bi bi-volume-up-fill"></i> Sound Enabled';
+        soundBtn.disabled = true;
+        soundBtn.classList.remove('btn-outline-primary');
+        soundBtn.classList.add('btn-success');
+    }
+
+    soundBtn.addEventListener('click', function() {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtx.resume();
+        soundEnabled = true;
+        sessionStorage.setItem('soundEnabled', 'true');
+        this.innerHTML = '<i class="bi bi-volume-up-fill"></i> Sound Enabled';
+        this.disabled = true;
+        this.classList.remove('btn-outline-primary');
+        this.classList.add('btn-success');
+    });
+
+    function playBeep() {
+        if (!soundEnabled || !audioCtx) return;
+        function tone(startTime, freq) {
+            const oscillator = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            oscillator.connect(gain);
+            gain.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.value = freq;
+            gain.gain.setValueAtTime(0.5, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.5);
+            oscillator.start(startTime);
+            oscillator.stop(startTime + 0.5);
+        }
+        const now = audioCtx.currentTime;
+        tone(now, 880);
+        tone(now + 0.35, 880);
+    }
+
+    function statusBadgeClass(status) {
+        if (status === 'available') return 'bg-success';
+        if (status === 'occupied') return 'bg-danger';
+        if (status === 'cleaning') return 'bg-warning text-dark';
+        if (status === 'reserved') return 'bg-info text-dark';
+        return 'bg-secondary';
+    }
+
+    function renderBedCard(bed) {
+        let medHtml = '';
+        if (bed.medication_morning || bed.medication_afternoon || bed.medication_evening) {
+            medHtml = '<div class="bed-medication">';
+            if (bed.medication_morning) medHtml += `<span title="Morning">🌅 ${bed.medication_morning}</span><br>`;
+            if (bed.medication_afternoon) medHtml += `<span title="Afternoon">☀️ ${bed.medication_afternoon}</span><br>`;
+            if (bed.medication_evening) medHtml += `<span title="Evening">🌙 ${bed.medication_evening}</span>`;
+            medHtml += '</div>';
+        }
+
+        const guardianIcon = bed.has_guardian_space ? '<i class="bi bi-people-fill" title="Guardian space"></i>' : '';
+        const patientHtml = bed.patient_name ? `<div class="bed-patient">${bed.patient_name}</div>${medHtml}` : '';
+
+        const a = document.createElement('a');
+        a.href = `/bed/${bed.id}/`;
+        a.className = 'bed-link';
+        a.innerHTML = `
+            <div class="bed-icon-wrap">
+                <svg viewBox="0 0 160 90" class="bed-svg bed-status-${bed.status}">
+                    <rect x="5" y="10" width="150" height="70" rx="8" class="bed-frame"/>
+                    <rect x="10" y="15" width="20" height="60" rx="4" class="bed-headboard"/>
+                    <rect x="35" y="20" width="115" height="50" rx="6" class="bed-mattress"/>
+                    <ellipse cx="50" cy="35" rx="12" ry="8" class="bed-pillow"/>
+                </svg>
+                <div class="bed-label">
+                    <strong>${bed.bed_number}</strong>
+                    ${guardianIcon}
+                    ${patientHtml}
+                    <span class="badge ${statusBadgeClass(bed.status)}">${bed.status_display}</span>
+                </div>
+            </div>
+        `;
+        return a;
+    }
+
+    function refreshBeds() {
+        fetch('/nurse-dashboard-data/')
+            .then(response => response.json())
+            .then(data => {
+                const leftSide = document.getElementById('pod-side-left');
+                const rightSide = document.getElementById('pod-side-right');
+                if (!leftSide || !rightSide) return;
+                const noBedsMsg = document.getElementById('no-beds-msg');
+
+                leftSide.innerHTML = '';
+                rightSide.innerHTML = '';
+
+                if (data.beds.length === 0) {
+                    noBedsMsg.style.display = 'block';
+                } else {
+                    noBedsMsg.style.display = 'none';
+                    data.beds.slice(0, 6).forEach(bed => leftSide.appendChild(renderBedCard(bed)));
+                    data.beds.slice(6).forEach(bed => rightSide.appendChild(renderBedCard(bed)));
+                }
+
+                if (lastKnownNotificationId === null) {
+                    lastKnownNotificationId = data.latest_notification_id;
+                } else if (data.latest_notification_id > lastKnownNotificationId) {
+                    lastKnownNotificationId = data.latest_notification_id;
+                    playBeep();
+                }
+            })
+            .catch(() => {});
+    }
+
+    refreshBeds();
+    setInterval(refreshBeds, 3000);
+
+    const searchInput = document.getElementById('patient-search-input');
+    const resultsBox = document.getElementById('search-results-dropdown');
+    let debounceTimer = null;
+
+    searchInput.addEventListener('keyup', function() {
+        clearTimeout(debounceTimer);
+        const query = searchInput.value.trim();
+
+        if (query.length === 0) {
+            resultsBox.style.display = 'none';
+            resultsBox.innerHTML = '';
+            return;
+        }
+
+        debounceTimer = setTimeout(function() {
+            fetch(`/search-patients/?q=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(data => {
+                    resultsBox.innerHTML = '';
+                    if (data.results.length === 0) {
+                        resultsBox.innerHTML = '<div class="list-group-item text-muted">No patients found.</div>';
+                    } else {
+                        data.results.forEach(function(item) {
+                            const link = document.createElement('a');
+                            link.href = item.url;
+                            link.className = 'list-group-item list-group-item-action';
+                            link.innerHTML = `<strong>${item.name}</strong><br><small class="text-muted">${item.ward} - Bed ${item.bed_number}</small>`;
+                            resultsBox.appendChild(link);
+                        });
+                    }
+                    resultsBox.style.display = 'block';
+                })
+                .catch(() => {
+                    resultsBox.style.display = 'none';
+                });
+        }, 300);
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!resultsBox.contains(e.target) && e.target !== searchInput) {
+            resultsBox.style.display = 'none';
+        }
+    });
+</script>
+
+<style>
+.pod-layout {
+    display: flex;
+    gap: 20px;
+    align-items: stretch;
+    margin-top: 10px;
+}
+.pod-side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.pod-corridor {
+    width: 70px;
+    background: repeating-linear-gradient(45deg, #e9edf2, #e9edf2 10px, #f4f8fb 10px, #f4f8fb 20px);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #8a99a8;
+    font-size: 0.7rem;
+    text-align: center;
+    padding: 10px 4px;
+    gap: 6px;
+}
+.bed-link { text-decoration: none; }
+.bed-icon-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: white;
+    border-radius: 12px;
+    padding: 10px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transition: transform 0.15s ease;
+}
+.bed-icon-wrap:hover { transform: translateY(-2px); }
+.bed-svg { width: 90px; height: auto; flex-shrink: 0; }
+.bed-frame { fill: #f0f0f0; stroke: #999; stroke-width: 2; }
+.bed-headboard { fill: #888; }
+.bed-mattress { fill: #ffffff; stroke: #ccc; stroke-width: 1.5; }
+.bed-pillow { fill: #e0e0e0; }
+.bed-status-available .bed-mattress { fill: #d7f2df; stroke: #198754; }
+.bed-status-occupied .bed-mattress { fill: #fbdadd; stroke: #dc3545; }
+.bed-status-cleaning .bed-mattress { fill: #fff3cd; stroke: #ffc107; }
+.bed-status-out_of_service .bed-mattress { fill: #e2e3e5; stroke: #6c757d; }
+.bed-label { color: #222; font-size: 0.9rem; }
+.bed-patient { font-size: 0.8rem; color: #555; }
+.bed-medication { font-size: 0.75rem; color: #444; margin-top: 4px; line-height: 1.4; }
+
+@media (max-width: 768px) {
+    .pod-layout { flex-direction: column; }
+    .pod-corridor { width: 100%; flex-direction: row; padding: 8px; }
+}
+</style>done
+{% endblock %}
