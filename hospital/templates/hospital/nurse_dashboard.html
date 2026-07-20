@@ -150,7 +150,8 @@
         }
 
         const guardianIcon = bed.has_guardian_space ? '<i class="bi bi-people-fill" title="Guardian space"></i>' : '';
-        const patientHtml = bed.patient_name ? `<div class="bed-patient">${bed.patient_name}</div>${medHtml}` : '';
+        const ageText = bed.patient_age ? ` (${bed.patient_age}y)` : '';
+        const patientHtml = bed.patient_name ? `<div class="bed-patient">${bed.patient_name}${ageText}</div>${medHtml}` : '';
 
         const a = document.createElement('a');
         a.href = `/bed/${bed.id}/`;

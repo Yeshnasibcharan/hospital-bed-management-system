@@ -5,6 +5,8 @@ from django.utils import timezone
 from django.http import JsonResponse
 from datetime import timedelta
 import json
+import csv
+from django.http import HttpResponse
 from .models import Ward, Bed, Patient, Admission, Notification, MedicationCheck
 from .forms import AdmitPatientForm, TransferPatientForm
 
@@ -346,8 +348,10 @@ def admin_dashboard(request):
     }
     return render(request, 'hospital/admin_dashboard.html', context)
 
-import csv
-from django.http import HttpResponse
+
+@login_required
+def admin_dashboard_data(request):
+    return JsonResponse(_build_admin_dashboard_data())
 
 
 @login_required
@@ -398,10 +402,6 @@ def export_admission_history_csv(request):
         ])
 
     return response
-
-@login_required
-def admin_dashboard_data(request):
-    return JsonResponse(_build_admin_dashboard_data())
 
 
 @login_required
@@ -623,6 +623,7 @@ def ward_beds_data(request, ward_id):
             'status_display': bed.get_status_display(),
             'has_guardian_space': bed.has_guardian_space,
             'patient_name': admission.patient.full_name if admission else None,
+            'patient_age': admission.patient.age if admission else None,
             'medication_morning': admission.medication_morning if admission else '',
             'medication_afternoon': admission.medication_afternoon if admission else '',
             'medication_evening': admission.medication_evening if admission else '',
@@ -675,6 +676,7 @@ def nurse_dashboard_data(request):
             'status_display': bed.get_status_display(),
             'has_guardian_space': bed.has_guardian_space,
             'patient_name': admission.patient.full_name if admission else None,
+            'patient_age': admission.patient.age if admission else None,
             'medication_morning': admission.medication_morning if admission else '',
             'medication_afternoon': admission.medication_afternoon if admission else '',
             'medication_evening': admission.medication_evening if admission else '',

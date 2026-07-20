@@ -25,6 +25,7 @@
         <hr>
         <p class="mb-1"><strong>Patient:</strong> {{ admission.patient.full_name }}</p>
         <p class="mb-1"><strong>Gender:</strong> {{ admission.patient.get_gender_display }}</p>
+        <p class="mb-1"><strong>Age:</strong> {{ admission.patient.age }} years</p>
         <p class="mb-1"><strong>Admitted:</strong> {{ admission.admission_date }}</p>
         <form method="post" action="{% url 'discharge_patient' bed.id %}" class="mt-3 d-inline">
             {% csrf_token %}

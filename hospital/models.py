@@ -62,6 +62,14 @@ class Patient(models.Model):
     def __str__(self):
         return self.full_name
 
+    @property
+    def age(self):
+        from django.utils import timezone
+        today = timezone.now().date()
+        return today.year - self.date_of_birth.year - (
+            (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day)
+        )
+
 
 class Admission(models.Model):
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='admissions')
