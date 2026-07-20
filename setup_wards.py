@@ -1,4 +1,4 @@
-﻿from django.contrib.auth.models import User
+from django.contrib.auth.models import User
 from hospital.models import Ward, Bed
 
 ward_data = [
