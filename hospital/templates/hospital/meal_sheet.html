@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Meal Sheet{% endblock %}
+{% block bg_image %}{% static 'hospital/images/nurse_banner.png' %}{% endblock %}
+{% block content %}
+<a href="{% url 'nurse_dashboard' %}" class="btn btn-outline-secondary btn-sm mb-3">
+    <i class="bi bi-arrow-left"></i> Back to Dashboard
+</a>
+<h2 class="mb-1"><i class="bi bi-egg-fried"></i> Meal Sheet — {{ assigned_ward.name }}</h2>
+<p class="text-muted mb-4">Week of {{ week_dates.0|date:"M d" }} – {{ week_dates.6|date:"M d, Y" }}</p>
+
+{% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<form method="post" id="meal-form">
+    {% csrf_token %}
+    {% for section in grid %}
+    <div class="card card-medical p-3 mb-4">
+        <h5 class="mb-3">
+            {% if section.slot == 'breakfast' %}🌅{% elif section.slot == 'lunch' %}☀️{% else %}🌙{% endif %}
+            {{ section.label }}
+        </h5>
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle text-center mb-3">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-start">Bed</th>
+                        <th class="text-start">Diet</th>
+                        {% for date in week_dates %}
+                        <th>{{ date|date:"D" }}<br><small class="text-muted">{{ date|date:"M d" }}</small></th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in section.rows %}
+                    <tr>
+                        <td class="text-start"><strong>{{ row.bed.bed_number }}</strong></td>
+                        <td class="text-start small">{{ row.diet|default:"—" }}</td>
+                        {% for cell in row.cells %}
+                        <td>
+                            <input type="checkbox" class="form-check-input" name="{{ cell.checkbox_name }}" {% if cell.checked %}checked{% endif %}>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="9" class="text-muted">No beds in this ward.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <button type="submit" form="meal-form" class="btn btn-primary">
+            <i class="bi bi-check2-circle"></i> Done
+        </button>
+    </div>
+    {% endfor %}
+</form>
+{% endblock %}

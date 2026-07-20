@@ -9,7 +9,7 @@ import csv
 from django.http import HttpResponse
 from .models import Ward, Bed, Patient, Admission, Notification, MedicationCheck
 from .forms import AdmitPatientForm, TransferPatientForm
-
+from .models import Ward, Bed, Patient, Admission, Notification, MedicationCheck, MealCheck
 
 def check_ward_capacity(ward):
     total = ward.beds.count()
@@ -529,6 +529,73 @@ def medication_sheet(request):
         'grid': grid,
     })
 
+@login_required
+def meal_sheet(request):
+    profile = request.user.profile
+    assigned_ward = profile.assigned_ward
+
+    if not assigned_ward:
+        messages.error(request, "No ward assigned to your account.")
+        return redirect('nurse_dashboard')
+
+    today = timezone.now().date()
+    monday = today - timedelta(days=today.weekday())
+    week_dates = [monday + timedelta(days=i) for i in range(7)]
+
+    beds = assigned_ward.beds.order_by('bed_number')
+
+    if request.method == 'POST':
+        for bed in beds:
+            for date in week_dates:
+                for slot, _ in MealCheck.MEAL_SLOT_CHOICES:
+                    checkbox_name = f"meal_{bed.id}_{date.isoformat()}_{slot}"
+                    is_checked = checkbox_name in request.POST
+
+                    record, created = MealCheck.objects.get_or_create(
+                        bed=bed, date=date, meal_slot=slot,
+                        defaults={'is_served': is_checked}
+                    )
+                    if record.is_served != is_checked:
+                        record.is_served = is_checked
+                        record.checked_by = request.user if is_checked else None
+                        record.checked_at = timezone.now() if is_checked else None
+                        record.save()
+                    elif is_checked and record.checked_by is None:
+                        record.checked_by = request.user
+                        record.checked_at = timezone.now()
+                        record.save()
+
+        messages.success(request, "Meal sheet saved.")
+        return redirect('meal_sheet')
+
+    existing_checks = MealCheck.objects.filter(bed__ward=assigned_ward, date__in=week_dates)
+    check_map = {}
+    for c in existing_checks:
+        check_map[(c.bed_id, c.date, c.meal_slot)] = c.is_served
+
+    grid = []
+    for slot, slot_label in MealCheck.MEAL_SLOT_CHOICES:
+        slot_rows = []
+        for bed in beds:
+            active_admission = bed.admissions.filter(is_active=True).first()
+            diet_text = active_admission.get_diet_display() if active_admission else ''
+
+            row = {'bed': bed, 'diet': diet_text, 'cells': []}
+            for date in week_dates:
+                row['cells'].append({
+                    'date': date,
+                    'checkbox_name': f"meal_{bed.id}_{date.isoformat()}_{slot}",
+                    'checked': check_map.get((bed.id, date, slot), False),
+                })
+            slot_rows.append(row)
+        grid.append({'slot': slot, 'label': slot_label, 'rows': slot_rows})
+
+    return render(request, 'hospital/meal_sheet.html', {
+        'assigned_ward': assigned_ward,
+        'week_dates': week_dates,
+        'grid': grid,
+    })
+
 
 @login_required
 def search_patients(request):
@@ -622,8 +689,8 @@ def ward_beds_data(request, ward_id):
             'status': bed.status,
             'status_display': bed.get_status_display(),
             'has_guardian_space': bed.has_guardian_space,
-            'patient_name': admission.patient.full_name if admission else None,
             'patient_age': admission.patient.age if admission else None,
+            'patient_pin': admission.patient.patient_pin if admission else None,
             'medication_morning': admission.medication_morning if admission else '',
             'medication_afternoon': admission.medication_afternoon if admission else '',
             'medication_evening': admission.medication_evening if admission else '',
@@ -677,6 +744,7 @@ def nurse_dashboard_data(request):
             'has_guardian_space': bed.has_guardian_space,
             'patient_name': admission.patient.full_name if admission else None,
             'patient_age': admission.patient.age if admission else None,
+            'patient_pin': admission.patient.patient_pin if admission else None,
             'medication_morning': admission.medication_morning if admission else '',
             'medication_afternoon': admission.medication_afternoon if admission else '',
             'medication_evening': admission.medication_evening if admission else '',

@@ -50,6 +50,9 @@
 <a href="{% url 'medication_sheet' %}" class="btn btn-outline-primary mb-4">
     <i class="bi bi-capsule"></i> Medication Sheet
 </a>
+<a href="{% url 'meal_sheet' %}" class="btn btn-outline-success mb-4">
+    <i class="bi bi-egg-fried"></i> Meal Sheet
+</a>
 
 <p class="text-muted">Beds in {{ assigned_ward.name }}:</p>
 <div class="pod-layout">
@@ -140,19 +143,11 @@
     }
 
     function renderBedCard(bed) {
-        let medHtml = '';
-        if (bed.medication_morning || bed.medication_afternoon || bed.medication_evening) {
-            medHtml = '<div class="bed-medication">';
-            if (bed.medication_morning) medHtml += `<span title="Morning">🌅 ${bed.medication_morning}</span><br>`;
-            if (bed.medication_afternoon) medHtml += `<span title="Afternoon">☀️ ${bed.medication_afternoon}</span><br>`;
-            if (bed.medication_evening) medHtml += `<span title="Evening">🌙 ${bed.medication_evening}</span>`;
-            medHtml += '</div>';
-        }
-
-        const guardianIcon = bed.has_guardian_space ? '<i class="bi bi-people-fill" title="Guardian space"></i>' : '';
-        const ageText = bed.patient_age ? ` (${bed.patient_age}y)` : '';
-        const patientHtml = bed.patient_name ? `<div class="bed-patient">${bed.patient_name}${ageText}</div>${medHtml}` : '';
-
+    const guardianIcon = bed.has_guardian_space ? '<i class="bi bi-people-fill" title="Guardian space"></i>' : '';
+    const ageText = bed.patient_age ? ` (${bed.patient_age}y)` : '';
+    const pinText = bed.patient_pin ? ` — PIN ${bed.patient_pin}` : '';
+    const patientHtml = bed.patient_name ? `<div class="bed-patient">${bed.patient_name}${ageText}${pinText}</div>` : '';
+    
         const a = document.createElement('a');
         a.href = `/bed/${bed.id}/`;
         a.className = 'bed-link';

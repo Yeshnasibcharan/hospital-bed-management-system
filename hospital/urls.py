@@ -23,4 +23,5 @@ urlpatterns = [
     path('medication-sheet/', views.medication_sheet, name='medication_sheet'),
     path('export/bed-status/', views.export_bed_status_csv, name='export_bed_status_csv'),
     path('export/admission-history/', views.export_admission_history_csv, name='export_admission_history_csv'),
+    path('meal-sheet/', views.meal_sheet, name='meal_sheet'),
 ]

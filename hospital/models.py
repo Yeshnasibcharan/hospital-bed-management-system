@@ -21,6 +21,8 @@ class Ward(models.Model):
         default='mixed',
         help_text="Male-only or Female-only wards auto-assign patient gender on admission. Mixed wards (e.g. Pediatric) require manual selection."
     )
+    medication_round_active = models.BooleanField(default=False)
+    medication_round_started_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -58,6 +60,17 @@ class Patient(models.Model):
     date_of_birth = models.DateField()
     contact_number = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
+    patient_pin = models.CharField(max_length=6, unique=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.patient_pin:
+            import random
+            while True:
+                candidate = str(random.randint(100000, 999999))
+                if not Patient.objects.filter(patient_pin=candidate).exists():
+                    self.patient_pin = candidate
+                    break
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.full_name
@@ -72,6 +85,14 @@ class Patient(models.Model):
 
 
 class Admission(models.Model):
+    DIET_CHOICES = [
+        ('standard', 'Standard Diet'),
+        ('diabetic', 'Diabetic Diet'),
+        ('low_salt', 'Low-Salt Diet'),
+        ('soft', 'Soft Diet'),
+        ('npo', 'NPO (Nil by Mouth)'),
+    ]
+
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='admissions')
     bed = models.ForeignKey(Bed, on_delete=models.CASCADE, related_name='admissions')
     admitted_by = models.ForeignKey(
@@ -83,10 +104,10 @@ class Admission(models.Model):
     medication_morning = models.CharField(max_length=255, blank=True)
     medication_afternoon = models.CharField(max_length=255, blank=True)
     medication_evening = models.CharField(max_length=255, blank=True)
+    diet = models.CharField(max_length=20, choices=DIET_CHOICES, default='standard')
 
     def __str__(self):
         return f"{self.patient.full_name} - {self.bed.bed_number}"
-
 
 class CleaningRequest(models.Model):
     bed = models.ForeignKey(Bed, on_delete=models.CASCADE, related_name='cleaning_requests')
@@ -143,3 +164,25 @@ class MedicationCheck(models.Model):
 
     def __str__(self):
         return f"{self.bed.bed_number} - {self.date} {self.get_time_slot_display()}"
+    
+class MealCheck(models.Model):
+    MEAL_SLOT_CHOICES = [
+        ('breakfast', 'Breakfast'),
+        ('lunch', 'Lunch'),
+        ('dinner', 'Dinner'),
+    ]
+
+    bed = models.ForeignKey(Bed, on_delete=models.CASCADE, related_name='meal_checks')
+    date = models.DateField()
+    meal_slot = models.CharField(max_length=10, choices=MEAL_SLOT_CHOICES)
+    is_served = models.BooleanField(default=False)
+    checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='meal_checks'
+    )
+    checked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('bed', 'date', 'meal_slot')
+
+    def __str__(self):
+        return f"{self.bed.bed_number} - {self.date} {self.get_meal_slot_display()}"
